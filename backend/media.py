@@ -43,6 +43,21 @@ def ass_escape(text: str) -> str:
     return text.replace("\\", "＼").replace("{", "｛").replace("}", "｝").replace("\n", r"\N")
 
 
+def tempo_filter(speed: float) -> str:
+    """Chain supported atempo factors; large adjustments retain the whole audio."""
+    if not math.isfinite(speed) or speed <= 0:
+        raise ValueError("음성 속도가 올바르지 않습니다.")
+    factors = []
+    while speed > 2.0:
+        factors.append(2.0)
+        speed /= 2.0
+    while speed < 0.5:
+        factors.append(0.5)
+        speed /= 0.5
+    factors.append(speed)
+    return ",".join(f"atempo={factor:.10f}" for factor in factors)
+
+
 def render_video(project: dict, folder: Path, audio: list[dict], progress, cancel: Event) -> dict:
     import numpy as np
     import soundfile as sf
@@ -84,7 +99,7 @@ def render_video(project: dict, folder: Path, audio: list[dict], progress, cance
         )
         run_ffmpeg(["-loop", "1", "-framerate", "30", "-i", image_name,
                     "-i", f"voice_{i + 1:02d}.wav", "-filter_complex", filters,
-                    "-map", "[v]", "-map", "1:a", "-af", f"atempo={speed:.8f},apad",
+                    "-map", "[v]", "-map", "1:a", "-af", f"{tempo_filter(speed)},apad",
                     "-t", f"{duration:.8f}", "-r", "30", "-c:v", "libx264", "-preset", "veryfast",
                     "-crf", "23", "-threads", "4", "-c:a", "aac", "-ar", "48000", "-b:a", "128k", clip], folder, cancel)
         clips.append(clip)

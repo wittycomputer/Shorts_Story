@@ -26,11 +26,35 @@ def test_duplicate_scene_ids_are_rejected():
 def test_timing_never_truncates_narration():
     speed, pauses = allocate_timing([6.0, 7.0, 5.0, 7.0], 30)
     assert sum([6, 7, 5, 7]) / speed + sum(pauses) + 2 == pytest.approx(30)
-    assert 1 <= speed <= 1.25
-    with pytest.raises(ValueError, match='깁니다'):
-        allocate_timing([20, 20, 20, 20], 30)
-    with pytest.raises(ValueError, match='짧습니다'):
-        allocate_timing([1, 1], 60)
+    assert 0.85 <= speed <= 1.25
+
+
+@pytest.mark.parametrize('durations,target', [
+    ([1, 1], 60),
+    ([3.37, 2.78, 2.36, 4.04, 3.86, 5.26, 2.32, 2.02], 60),
+    ([20, 20, 20, 20], 30),
+    ([40, 40], 45),
+])
+def test_short_and_long_narrations_finish_at_requested_length(durations, target):
+    speed, pauses = allocate_timing(durations, target)
+    assert sum(durations) / speed + sum(pauses) + 2 == pytest.approx(target)
+    assert speed >= 0.85
+    assert all(pause > 0 for pause in pauses)
+
+
+@pytest.mark.parametrize('durations', [[], [0], [-1], [float('nan')], [float('inf')]])
+def test_invalid_audio_still_rejected(durations):
+    with pytest.raises(ValueError, match='음성 길이'):
+        allocate_timing(durations, 60)
+
+
+@pytest.mark.parametrize('speed', [0.125, 0.85, 1.0, 1.25, 4.5, 12.0])
+def test_tempo_chain_uses_supported_factors_and_preserves_speed(speed):
+    import math
+    from media import tempo_filter
+    factors = [float(filter.split('=')[1]) for filter in tempo_filter(speed).split(',')]
+    assert all(0.5 <= factor <= 2.0 for factor in factors)
+    assert math.prod(factors) == pytest.approx(speed)
 
 
 def test_caption_splitting_retains_every_word_and_bounds_width():

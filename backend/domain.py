@@ -115,21 +115,17 @@ def speech_phrases(text: str, limit: int = 40) -> list[str]:
 
 
 def allocate_timing(durations: list[float], target: int, outro: float = 2.0) -> tuple[float, list[float]]:
-    """Return narration speed and per-scene pause. Never cut audio to fit a target."""
+    """Fit valid narration to the requested length without rejecting or cutting it."""
     if not durations or any(not math.isfinite(d) or d <= 0 for d in durations):
         raise ValueError("음성 길이가 올바르지 않습니다.")
     available = target - outro
     if available <= 0:
         raise ValueError("목표 길이가 너무 짧습니다.")
-    speed = max(1.0, sum(durations) / (available - 0.12 * len(durations)))
-    if speed > 1.25:
-        raise ValueError("대본이 목표 길이보다 깁니다. 문장을 줄이거나 더 긴 영상을 선택해 주세요.")
-    remaining = available - sum(durations) / speed
-    # A short source stays short; don't pad 20 seconds of silent stills.
-    if remaining / len(durations) > 3.0:
-        raise ValueError("대본이 목표 길이보다 짧습니다. 원문에 근거한 내용을 보충해 주세요.")
+    min_pause = min(0.12, available / (2 * len(durations)))
     total = sum(durations)
-    pauses = [remaining * d / total for d in durations]
+    speed = max(0.85, total / (available - min_pause * len(durations)))
+    extra_pause = max(0.0, available - total / speed - min_pause * len(durations))
+    pauses = [min_pause + extra_pause * d / total for d in durations]
     return speed, pauses
 
 

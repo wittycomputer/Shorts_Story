@@ -129,6 +129,36 @@ def worker(project_id: str, kind: str, event: Event):
             folder = folder_for(project_id)
             generate_images(project, folder, progress, event)
             audio = synthesize(project, folder, progress, event)
+            duration = sum(record["duration"] for record in audio)
+            speech_budget = project["target_seconds"] - 2 - 0.12 * len(audio)
+            if duration > 0 and not speech_budget * 0.70 <= duration <= speech_budget * 1.25:
+                # Use measured TTS timing to improve the draft automatically. Failure
+                # to rewrite must not prevent valid existing audio from becoming a video.
+                try:
+                    progress(65, "목표 길이에 맞게 대본을 자동으로 조정하는 중")
+                    characters = sum(len(scene["narration"]) for scene in project["scenes"])
+                    characters = max(12 * len(audio), min(280 * len(audio),
+                                     round(characters * speech_budget * 0.94 / duration)))
+                    scenes = generate_draft(project,
+                        lambda _value, _message: progress(65, "원문을 바탕으로 대본 분량을 맞추는 중"), event,
+                        narration_characters=characters, existing_scenes=project["scenes"])
+                    checkpoint(event)
+                    adjusted = {**project, "scenes": scenes}
+                    adjusted_folder = folder / "timing-adjusted"
+                    adjusted_folder.mkdir(exist_ok=True)
+                    adjusted_audio = synthesize(adjusted, adjusted_folder,
+                        lambda _value, message: progress(66, message), event)
+                    checkpoint(event)
+                    adjusted_duration = sum(record["duration"] for record in adjusted_audio)
+                    if abs(adjusted_duration - speech_budget) < abs(duration - speech_budget):
+                        project, audio = adjusted, adjusted_audio
+                        update(project_id, scenes=scenes, warnings=factual_warnings(scenes, project["text"]),
+                               message="대본과 음성 길이를 자동으로 맞췄습니다.")
+                except Cancelled:
+                    raise
+                except Exception as exc:
+                    log.warning("Automatic narration adjustment skipped: %s", type(exc).__name__)
+                    progress(66, "음성 속도와 장면 길이를 자동으로 맞추는 중")
             result = render_video(project, folder, audio, progress, event)
             checkpoint(event)
             update(project_id, status="completed", progress=100, message="숏츠가 완성됐습니다.", result=result)
