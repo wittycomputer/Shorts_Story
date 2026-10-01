@@ -1,0 +1,36 @@
+.gradle/
+.idea/
+**/build/
+local.properties
+backend/.venv/
+backend/data/
+backend/__pycache__/
+.pytest_cache/
+pytest-cache-files-*/
+**/__pycache__/
+*.log
+.env
+captures/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+android/local.properties
+*.iml
+.secrets/
+backend/firebase.local.json
+firebase-debug.log
+firestore-debug.log
+.firebase/
+.tools/
+firebase-emulator-data/
+# Each checkout configures its own Firebase project and Android SDK.
+config/firebase.json
+android/app/google-services.json
+.firebaserc
+config/local-tools.json
+node_modules/
+dist/
+# Original one-off provisioning and cloud smoke tests are local tools.
+scripts/provision-firebase.cjs
+scripts/verify-firebase-cloud.py

@@ -1,0 +1,14 @@
+{
+  "llm": {
+    "repo": "Qwen/Qwen3-4B",
+    "revision": "1cfa9a7208912126459214e8b04321603b3df60c"
+  },
+  "image": {
+    "repo": "stabilityai/sdxl-turbo",
+    "revision": "71153311d3dbb46851df1931d3ca6e939de83304"
+  },
+  "tts": {
+    "repo": "facebook/mms-tts-kor",
+    "revision": "1b6491366d2ed6ea8e4e735607155d9f0110df29"
+  }
+}

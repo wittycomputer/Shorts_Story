@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['display_name', 'login_id', 'updated_at'])
+        && request.resource.data.display_name is string
+        && request.resource.data.display_name.size() <= 40
+        && request.resource.data.login_id is string
+        && request.resource.data.login_id.matches('^[a-z][a-z0-9_]{3,19}$')
+        && request.auth.token.email == request.resource.data.login_id + '@users.shortory.invalid'
+        && request.resource.data.updated_at == request.time;
+      allow delete: if false;
+      match /shorts/{projectId} {
+        allow read: if isOwner(uid);
+        // Only the verified PC server writes generated project records.
+        allow write: if false;
+      }
+    }
+  }
+}

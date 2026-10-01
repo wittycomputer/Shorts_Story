@@ -1,0 +1,4 @@
+{
+  "project_id": "your-firebase-project-id",
+  "credential_path": "../.secrets/firebase-admin.json"
+}
