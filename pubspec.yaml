@@ -45,6 +45,7 @@ dependencies:
   cloud_firestore: 6.10.0
 
 dev_dependencies:
+  video_player_platform_interface: 6.6.0
   flutter_test:
     sdk: flutter
 

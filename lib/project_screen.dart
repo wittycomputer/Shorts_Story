@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import 'api.dart';
 import 'models.dart';
@@ -24,6 +25,9 @@ class _ProjectScreenState extends State<ProjectScreen> {
   bool polling = false, working = false, dirty = false, downloading = false;
   String? refreshError, videoError;
   double? downloadProgress;
+  SharedPreferences? volumePreferences;
+  double previewVolume = 1, lastAudibleVolume = 1;
+  int videoGeneration = 0;
   @override
   void initState() {
     super.initState();
@@ -59,12 +63,27 @@ class _ProjectScreenState extends State<ProjectScreen> {
 
   Future<void> _prepareVideo() async {
     if (!project.isCompleted || !mounted) return;
+    final generation = ++videoGeneration;
     final old = player;
     player = null;
     await old?.dispose();
+    if (!mounted || generation != videoGeneration) return;
     try {
+      if (volumePreferences == null) {
+        final preferences = await SharedPreferences.getInstance();
+        if (!mounted || generation != videoGeneration) return;
+        volumePreferences = preferences;
+        previewVolume = (preferences.getDouble('preview_volume') ?? 1)
+            .clamp(0.0, 1.0)
+            .toDouble();
+        lastAudibleVolume =
+            (preferences.getDouble('preview_last_audible_volume') ??
+                    (previewVolume > 0 ? previewVolume : 1))
+                .clamp(0.01, 1.0)
+                .toDouble();
+      }
       final headers = await widget.api.authHeaders();
-      if (!mounted) return;
+      if (!mounted || generation != videoGeneration) return;
       final controller = VideoPlayerController.networkUrl(
         Uri.parse(
           '${widget.api.fileUrl(project.id, 'shorts.mp4')}?v=${project.updated}',
@@ -72,15 +91,54 @@ class _ProjectScreenState extends State<ProjectScreen> {
         httpHeaders: headers,
       );
       player = controller;
+      await controller.setVolume(previewVolume);
+      if (!mounted || player != controller || generation != videoGeneration) {
+        return;
+      }
       await controller.initialize();
+      if (!mounted || player != controller || generation != videoGeneration) {
+        return;
+      }
       await controller.setLooping(true);
-      if (mounted && player == controller) setState(() => videoError = null);
+      if (mounted && player == controller && generation == videoGeneration) {
+        setState(() => videoError = null);
+      }
     } catch (_) {
-      if (mounted) {
+      if (mounted && generation == videoGeneration) {
         setState(
           () => videoError = '미리보기를 불러오지 못했습니다. PC 연결을 확인하고 다시 시도해 주세요.',
         );
       }
+    }
+  }
+
+  Future<void> _setPreviewVolume(double volume, {bool persist = false}) async {
+    final controller = player;
+    if (!mounted || controller?.value.isInitialized != true) return;
+    final selected = volume.clamp(0.0, 1.0).toDouble();
+    setState(() {
+      previewVolume = selected;
+      if (selected > 0 && persist) lastAudibleVolume = selected;
+    });
+    try {
+      await controller!.setVolume(selected);
+      if (persist) await _persistPreviewVolume();
+    } catch (_) {
+      if (mounted && player == controller) {
+        showError(context, '음량을 조절하지 못했습니다. 다시 시도해 주세요.');
+      }
+    }
+  }
+
+  Future<void> _persistPreviewVolume() async {
+    final preferences = volumePreferences;
+    if (preferences == null) return;
+    final volume = previewVolume, lastAudible = lastAudibleVolume;
+    try {
+      await preferences.setDouble('preview_volume', volume);
+      await preferences.setDouble('preview_last_audible_volume', lastAudible);
+    } catch (_) {
+      // Playback still works when the device cannot save a local preference.
     }
   }
 
@@ -125,6 +183,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
         }
       }
       if (!project.isCompleted) {
+        videoGeneration++;
         final old = player;
         player = null;
         await old?.dispose();
@@ -234,6 +293,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
   @override
   void dispose() {
     timer?.cancel();
+    videoGeneration++;
     player?.dispose();
     super.dispose();
   }
@@ -488,6 +548,57 @@ class _ProjectScreenState extends State<ProjectScreen> {
             backgroundColor: Color(0xFFEBEFED),
           ),
         ),
+      if (player?.value.isInitialized == true) ...[
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            IconButton(
+              key: const ValueKey('preview-mute'),
+              tooltip: previewVolume == 0 ? '음소거 해제' : '음소거',
+              onPressed: () => _setPreviewVolume(
+                previewVolume == 0 ? lastAudibleVolume : 0,
+                persist: true,
+              ),
+              icon: Icon(
+                previewVolume == 0
+                    ? Icons.volume_off_rounded
+                    : previewVolume < 0.5
+                    ? Icons.volume_down_rounded
+                    : Icons.volume_up_rounded,
+                color: inkGreen,
+              ),
+            ),
+            const Text('음량', style: TextStyle(fontSize: 13, color: muted)),
+            Expanded(
+              child: Slider(
+                key: const ValueKey('preview-volume'),
+                value: previewVolume,
+                divisions: 100,
+                label: '${(previewVolume * 100).round()}%',
+                semanticFormatterCallback: (value) =>
+                    '음량 ${(value * 100).round()}%',
+                onChanged: _setPreviewVolume,
+                onChangeStart: (value) {
+                  if (value > 0) lastAudibleVolume = value;
+                },
+                onChangeEnd: (value) {
+                  if (value > 0) lastAudibleVolume = value;
+                  _persistPreviewVolume();
+                },
+              ),
+            ),
+            SizedBox(
+              width: 44,
+              child: Text(
+                '${(previewVolume * 100).round()}%',
+                key: const ValueKey('preview-volume-label'),
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontSize: 13, color: inkGreen),
+              ),
+            ),
+          ],
+        ),
+      ],
       const SizedBox(height: 16),
       Text(
         '${(project.result?['duration'] as num? ?? project.target).toStringAsFixed(1)}초  ·  720 × 1280  ·  MP4',
