@@ -192,11 +192,14 @@ def synthesize(project: dict, folder: Path, progress, cancel: Event) -> list[dic
     from transformers import VitsModel, AutoTokenizer, set_seed
     from korean_speech import normalize_for_speech, speech_sentences
     from narration import clean_waveform, SENTENCE_PAUSE, VOICE_PIPELINE_VERSION
+    from speech_rhythm import install_rhythm_control, RHYTHM_PROFILE
     checkpoint(cancel)
     progress(37, "한국어 음성 모델을 불러오는 중")
     location = model_path("tts")
     tokenizer = AutoTokenizer.from_pretrained(location, local_files_only=True)
     model = VitsModel.from_pretrained(location, local_files_only=True).eval()
+    model.speaking_rate = RHYTHM_PROFILE['speaking_rate']
+    model.noise_scale_duration = RHYTHM_PROFILE['duration_noise']
     records = []
     audio_dir = folder / "audio"
     audio_dir.mkdir(exist_ok=True)
@@ -212,14 +215,19 @@ def synthesize(project: dict, folder: Path, progress, cancel: Event) -> list[dic
                 spoken = normalize_for_speech(phrase)
                 settings = {"version": VOICE_PIPELINE_VERSION, "spoken": spoken,
                             "model": json.loads((BASE / "models.lock.json").read_text("utf-8"))["tts"],
-                            "seed": 42, "sample_rate": model.config.sampling_rate}
+                            "seed": 42, "sample_rate": model.config.sampling_rate,
+                            "rhythm": RHYTHM_PROFILE}
                 digest = hashlib.sha256(json.dumps(settings, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
                 signature = filename.with_suffix(".sha256")
                 if not (filename.exists() and signature.exists() and signature.read_text() == digest):
                     inputs = tokenizer(spoken, return_tensors="pt")
                     set_seed(42)
-                    with torch.inference_mode():
-                        output = model(**inputs).waveform[0].cpu().numpy()
+                    rhythm_hook, _report = install_rhythm_control(model, tokenizer, inputs)
+                    try:
+                        with torch.inference_mode():
+                            output = model(**inputs).waveform[0].cpu().numpy()
+                    finally:
+                        rhythm_hook.remove()
                     output = clean_waveform(output, model.config.sampling_rate)
                     sf.write(filename, output, model.config.sampling_rate)
                     signature.write_text(digest)

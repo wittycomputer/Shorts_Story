@@ -27,6 +27,9 @@ def test_synthesis_uses_whole_sentences_reading_forms_and_invalidates_old_cache(
     monkeypatch.setattr(transformers.AutoTokenizer, 'from_pretrained', lambda *_a, **_k: Tokenizer())
     monkeypatch.setattr(transformers.VitsModel, 'from_pretrained', lambda *_a, **_k: Voice())
     monkeypatch.setattr(inference, 'release_memory', lambda: None)
+    removed_hooks = []
+    monkeypatch.setattr('speech_rhythm.install_rhythm_control',
+                        lambda *_: (SimpleNamespace(remove=lambda: removed_hooks.append(True)), {}))
     text = '지수는 전월 88.6에서 81.9로 내려갔으며, 고용과 경기 전망도 함께 살펴봐야 합니다.'
     project = {'scenes': [{'id': 1, 'narration': text}]}
     original = copy.deepcopy(project)
@@ -37,6 +40,7 @@ def test_synthesis_uses_whole_sentences_reading_forms_and_invalidates_old_cache(
     (audio_dir / '01_00.sha256').write_text(hashlib.sha256(text.encode()).hexdigest())
     records = inference.synthesize(project, tmp_path, lambda *_: None, Event())
     assert len(spoken_inputs) == 1
+    assert removed_hooks == [True]
     assert '팔십팔 점 육' in spoken_inputs[0] and '팔십일 점 구' in spoken_inputs[0]
     assert len(records[0]['phrases']) == 1
     assert records[0]['phrases'][0]['text'] == text

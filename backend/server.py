@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse
 from domain import CreateProject, EditScenes, factual_warnings, paragraphs
 from inference import Cancelled, checkpoint, generate_draft, generate_images, synthesize
 from media import render_video
+from narration import VOICE_PIPELINE_VERSION
 from firebase_service import current_user, public_settings, write_project
 
 BASE = Path(__file__).resolve().parent
@@ -216,6 +217,7 @@ def health():
     return {"status": "ok", "name": "쇼토리 로컬 AI", "models_ready": all(k in models for k in ("llm", "image", "tts")),
             "models": models, "ffmpeg": bool(shutil.which("ffmpeg")), "active_jobs": len(events),
             "privacy": "local-ai-firebase-records", "api_version": 2,
+            "voice_pipeline": VOICE_PIPELINE_VERSION,
             "auth_required": True, "firebase": public_settings()}
 
 
