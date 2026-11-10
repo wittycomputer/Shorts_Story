@@ -139,5 +139,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\connect-usb.ps1
 | PC 서버 연결 실패 | `start_server.bat`, 에뮬레이터의 `10.0.2.2`, USB의 `adb reverse`, 포트 8765 사용 여부를 확인합니다. |
 | 서버가 시작되지 않음 | `backend/data/server-error.log`를 확인합니다. 의존성·모델·Firebase 설정 검사가 통과해야 합니다. |
 | 기록은 보이지만 영상 재생 실패 | Firestore에는 영상 파일이 없습니다. 영상을 생성한 PC의 `backend/data/`와 실행 중인 서버가 필요합니다. |
+| 대사 발음·연결이 이전과 같음 | 소스 업데이트 후 PC 서버를 재시작하고 영상을 다시 생성합니다. 저장된 MP4는 코드 업데이트만으로 바뀌지 않습니다. 새 음성은 문장 단위로 생성하며 숫자·단위는 한국어 읽기를 적용합니다. |
+| 영상 소리가 들리지 않음 | 앱의 음량·음소거 상태와 Android 미디어 음량, PC 출력 장치의 음량·음소거를 차례로 확인합니다. |
 
 로그·원문·생성 자산은 자신의 PC에 남습니다. 서로 다른 PC의 로컬 영상이 같은 Firebase 계정을 사용한다고 자동 복제되지는 않습니다.

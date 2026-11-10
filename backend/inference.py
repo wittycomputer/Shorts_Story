@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 from threading import Event
+import runtime_paths  # Configure the local cache before importing HF libraries.
 
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -41,6 +42,28 @@ def release_memory():
         torch.cuda.empty_cache()
 
 
+def validate_rewrite(existing: list[dict], revised: list[dict], characters: int):
+    """Reject obvious topic/modality changes during an automatic timing rewrite."""
+    actual = sum(len(scene["narration"]) for scene in revised)
+    if not characters * 0.90 <= actual <= characters * 1.10:
+        raise ValueError(f"대본이 {actual}자입니다. 목표 {characters}자의 90~110%가 되도록 "
+                         "원문에 있는 사실로 분량을 실제로 수정해 주세요.")
+    groups = [("보도", ("보도", "전해", "알려")), ("전망", ("전망", "예상", "예측")),
+              ("우려", ("우려", "가능성", "위험")), ("주장", ("주장", "입장")),
+              ("의심", ("의심", "추정")), ("예정", ("예정", "계획", "방침")),
+              ("계획", ("예정", "계획", "방침")), ("추진", ("추진", "준비", "계획"))]
+    for old, new in zip(existing, revised):
+        if not set(new["source_ids"]).issubset(old["source_ids"]):
+            raise ValueError(f"장면 {old['id']}의 주제를 옮기지 말고 기존 source_ids 안에서 대사를 보정해 주세요.")
+        before, after = old["narration"], new["narration"]
+        for marker, equivalents in groups:
+            if marker in before and not any(word in after for word in equivalents):
+                raise ValueError(f"장면 {old['id']}의 '{marker}' 표현을 유지해 확정 사실로 바꾸지 마세요.")
+        if any(word in before for word in ("에도", "지만", "불구")) and not any(
+                word in after for word in ("에도", "지만", "불구", "반면", "그러나")):
+            raise ValueError(f"장면 {old['id']}의 대비·인과관계를 유지해 주세요.")
+
+
 def generate_draft(project: dict, progress, cancel: Event, *,
                    narration_characters: int | None = None,
                    existing_scenes: list[dict] | None = None) -> list[dict]:
@@ -72,6 +95,9 @@ def generate_draft(project: dict, progress, cancel: Event, *,
 원문에 없는 사건, 숫자, 고유명사, 인용을 만들지 마라. 대본은 {tone} 어조다.
 반드시 JSON 객체만 출력한다. 정확히 {count}개 장면을 생성한다.
 전체 narration 길이는 공백 포함 약 {characters}자, 각 장면은 1~2개의 짧은 한국어 문장이다.
+각 장면의 대사는 문장 끝까지 완결하고, 한 문장을 여러 장면으로 나누지 마라.
+모든 장면에서 일관된 존댓말 종결형을 쓰고, 접속어만 남기거나 조사 뒤에서 끊지 마라.
+숫자와 단위는 원문 의미를 유지하고, 지나치게 긴 복문은 짧은 완결 문장으로 나눠라.
 중복 내용과 불필요한 인삿말을 피하고 핵심 사실을 유지한다.
 caption은 장면 주제를 나타내는 짧은 한국어 제목이다. image_prompt_en은 그 장면을 시각화한 20단어 이내의 영어 설명이다.
 source_ids는 근거가 되는 실제 문단 ID 목록이다.
@@ -81,6 +107,9 @@ id는 1부터 {count}까지 순서대로 작성한다."""
             system += """\n현재 장면 대본의 길이를 자동 보정하는 작업이다.
 장면의 순서와 주제, caption, image_prompt_en은 유지하고 narration 길이를 목표 글자 수에 맞춰라.
 짧은 대본은 원문에 실제로 있는 관련 사실과 설명을 보충하고 긴 대본은 핵심 사실을 유지하며 요약해라.
+현재 대본을 그대로 복사하지 말고 요구한 전체 글자 수의 90~110% 안으로 실제 분량을 바꿔라.
+각 장면은 기존 source_ids 안의 사실로만 보정하고 다른 장면의 내용을 옮기지 마라.
+주어, 인과관계, 수치·단위, 보도·주장·우려·전망 등 확실성의 수준을 유지해라.
 원문 밖의 사실이나 빈 인삿말, 내용 없는 반복을 추가하지 마라.
 source_ids는 보정한 narration을 뒷받침하는 실제 원문 문단 ID로 작성해라."""
             source_text += "\n\n현재 장면 대본:\n" + json.dumps(existing_scenes, ensure_ascii=False)
@@ -102,6 +131,7 @@ source_ids는 보정한 narration을 뒷받침하는 실제 원문 문단 ID로 
                 if existing_scenes and len(scenes) != count:
                     raise ValueError(f"장면은 정확히 {count}개여야 합니다.")
                 if existing_scenes:
+                    validate_rewrite(existing_scenes, scenes, characters)
                     # Preserve the user's visual edits and the already-generated images.
                     scenes = [{**old, "narration": new["narration"], "source_ids": new["source_ids"]}
                               for old, new in zip(existing_scenes, scenes)]
@@ -157,11 +187,11 @@ def generate_images(project: dict, folder: Path, progress, cancel: Event):
 
 
 def synthesize(project: dict, folder: Path, progress, cancel: Event) -> list[dict]:
-    import numpy as np
     import soundfile as sf
     import torch
     from transformers import VitsModel, AutoTokenizer, set_seed
-    from domain import speech_phrases
+    from korean_speech import normalize_for_speech, speech_sentences
+    from narration import clean_waveform, SENTENCE_PAUSE, VOICE_PIPELINE_VERSION
     checkpoint(cancel)
     progress(37, "한국어 음성 모델을 불러오는 중")
     location = model_path("tts")
@@ -174,30 +204,30 @@ def synthesize(project: dict, folder: Path, progress, cancel: Event) -> list[dic
         for index, scene in enumerate(project["scenes"]):
             checkpoint(cancel)
             progress(40 + int(24 * index / len(project["scenes"])), f'장면 {scene["id"]}의 한국어 내레이션을 만드는 중')
-            phrases = speech_phrases(scene["narration"])
+            phrases = speech_sentences(scene["narration"])
             scene_record = {"id": scene["id"], "phrases": [], "duration": 0.0}
             for phrase_index, phrase in enumerate(phrases):
                 checkpoint(cancel)
                 filename = audio_dir / f'{scene["id"]:02d}_{phrase_index:02d}.wav'
-                digest = hashlib.sha256(phrase.encode()).hexdigest()
+                spoken = normalize_for_speech(phrase)
+                settings = {"version": VOICE_PIPELINE_VERSION, "spoken": spoken,
+                            "model": json.loads((BASE / "models.lock.json").read_text("utf-8"))["tts"],
+                            "seed": 42, "sample_rate": model.config.sampling_rate}
+                digest = hashlib.sha256(json.dumps(settings, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
                 signature = filename.with_suffix(".sha256")
                 if not (filename.exists() and signature.exists() and signature.read_text() == digest):
-                    inputs = tokenizer(phrase, return_tensors="pt")
-                    set_seed(42 + scene["id"] * 100 + phrase_index)
+                    inputs = tokenizer(spoken, return_tensors="pt")
+                    set_seed(42)
                     with torch.inference_mode():
                         output = model(**inputs).waveform[0].cpu().numpy()
-                    if not np.isfinite(output).all() or len(output) < 200:
-                        raise RuntimeError("음성 모델이 유효한 파형을 생성하지 못했습니다.")
-                    # Trim only near-silent model padding, never spoken syllables.
-                    active = np.flatnonzero(np.abs(output) > 0.008)
-                    if len(active):
-                        pad = int(model.config.sampling_rate * 0.06)
-                        output = output[max(0, active[0] - pad):min(len(output), active[-1] + pad + 1)]
+                    output = clean_waveform(output, model.config.sampling_rate)
                     sf.write(filename, output, model.config.sampling_rate)
                     signature.write_text(digest)
                 duration = sf.info(filename).duration
-                scene_record["phrases"].append({"text": phrase, "file": str(filename), "duration": duration})
+                scene_record["phrases"].append({"text": phrase, "spoken_text": spoken,
+                                               "file": str(filename), "duration": duration})
                 scene_record["duration"] += duration
+            scene_record["duration"] += SENTENCE_PAUSE * max(0, len(phrases) - 1)
             records.append(scene_record)
         return records
     finally:

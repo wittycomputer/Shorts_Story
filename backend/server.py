@@ -131,7 +131,7 @@ def worker(project_id: str, kind: str, event: Event):
             audio = synthesize(project, folder, progress, event)
             duration = sum(record["duration"] for record in audio)
             speech_budget = project["target_seconds"] - 2 - 0.12 * len(audio)
-            if duration > 0 and not speech_budget * 0.70 <= duration <= speech_budget * 1.25:
+            if duration > 0 and not speech_budget * 0.90 <= duration <= speech_budget * 1.15:
                 # Use measured TTS timing to improve the draft automatically. Failure
                 # to rewrite must not prevent valid existing audio from becoming a video.
                 try:

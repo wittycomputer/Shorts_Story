@@ -9,8 +9,9 @@ import subprocess
 from pathlib import Path
 from threading import Event
 
-from domain import allocate_timing, ass_time, srt_time, wrap_caption
+from domain import ass_time, srt_time, wrap_caption
 from inference import checkpoint
+from narration import prepare_narration
 
 
 def run_ffmpeg(args: list[str], cwd: Path, cancel: Event):
@@ -59,33 +60,27 @@ def tempo_filter(speed: float) -> str:
 
 
 def render_video(project: dict, folder: Path, audio: list[dict], progress, cancel: Event) -> dict:
-    import numpy as np
-    import soundfile as sf
-    speed, pauses = allocate_timing([a["duration"] for a in audio], project["target_seconds"])
-    events, subtitles, clips = [], [], []
+    narration = prepare_narration(project, folder, audio, cancel)
+    speed = narration["speed"]
+    subtitles = narration["captions"]
+    events = [(entry["start"], entry["end"], "Subtitle", wrap_caption(entry["text"], 18))
+              for entry in subtitles]
+    clips = []
     cursor = 0.0
-    for i, record in enumerate(audio):
+    # Stretch/normalize a single PCM track. AAC is encoded only once at export,
+    # so image cuts cannot truncate quiet endings or introduce codec gaps.
+    run_ffmpeg(["-i", "narration.wav", "-af",
+                f"{tempo_filter(speed)},loudnorm=I=-16:TP=-1.5:LRA=11,apad",
+                "-t", str(project["target_seconds"]), "-ar", "48000", "-c:a", "pcm_s16le",
+                "narration-timed.wav"], folder, cancel)
+    for i, timing in enumerate(narration["scenes"]):
         checkpoint(cancel)
         scene = project["scenes"][i]
         progress(67 + int(21 * i / len(audio)), f'장면 {i + 1} 영상을 합성하는 중')
-        waves, sample_rate = [], None
-        offset = cursor
-        for phrase in record["phrases"]:
-            wave, rate = sf.read(phrase["file"], dtype="float32")
-            if sample_rate is not None and rate != sample_rate:
-                raise RuntimeError("음성 샘플레이트가 일치하지 않습니다.")
-            sample_rate = rate
-            waves.append(wave)
-            end = offset + phrase["duration"] / speed
-            subtitles.append({"start": offset, "end": end, "text": phrase["text"]})
-            events.append((offset, end, "Subtitle", wrap_caption(phrase["text"], 18)))
-            offset = end
-        sf.write(folder / f"voice_{i + 1:02d}.wav", np.concatenate(waves), sample_rate)
-        duration = record["duration"] / speed + pauses[i]
-        if i == len(audio) - 1:
-            duration += 2.0
         # Fixed 30 fps, round boundaries to frames. The last clip ends exactly at target.
-        end_frame = round((cursor + duration) * 30)
+        end_frame = round(timing["end"] * 30)
+        if i == len(audio) - 1:
+            end_frame = project["target_seconds"] * 30
         duration = end_frame / 30 - cursor
         caption = scene.get("caption") or scene["narration"][:22]
         events.append((cursor, cursor + duration, "Heading", wrap_caption(caption, 17)))
@@ -98,10 +93,9 @@ def render_video(project: dict, folder: Path, audio: list[dict], progress, cance
             "[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,format=yuv420p[v]"
         )
         run_ffmpeg(["-loop", "1", "-framerate", "30", "-i", image_name,
-                    "-i", f"voice_{i + 1:02d}.wav", "-filter_complex", filters,
-                    "-map", "[v]", "-map", "1:a", "-af", f"{tempo_filter(speed)},apad",
+                    "-filter_complex", filters, "-map", "[v]", "-an",
                     "-t", f"{duration:.8f}", "-r", "30", "-c:v", "libx264", "-preset", "veryfast",
-                    "-crf", "23", "-threads", "4", "-c:a", "aac", "-ar", "48000", "-b:a", "128k", clip], folder, cancel)
+                    "-crf", "23", "-threads", "4", clip], folder, cancel)
         clips.append(clip)
         cursor += duration
     target = project["target_seconds"]
@@ -132,8 +126,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     (folder / "subtitles.srt").write_text("\n".join(srt), "utf-8-sig")
     (folder / "concat.txt").write_text("\n".join(f"file '{clip}'" for clip in clips), "utf-8")
     progress(91, "장면을 연결하고 한글 자막을 넣는 중")
-    run_ffmpeg(["-f", "concat", "-safe", "0", "-i", "concat.txt", "-vf", "ass=captions.ass",
-                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-c:v", "libx264", "-preset", "veryfast",
+    run_ffmpeg(["-f", "concat", "-safe", "0", "-i", "concat.txt", "-i", "narration-timed.wav",
+                "-map", "0:v:0", "-map", "1:a:0", "-vf", "ass=captions.ass",
+                "-c:v", "libx264", "-preset", "veryfast",
                 "-crf", "22", "-threads", "4", "-c:a", "aac", "-ar", "48000", "-b:a", "128k",
                 "-movflags", "+faststart", "-t", str(target), "output.pending.mp4"], folder, cancel)
     checkpoint(cancel)
@@ -148,6 +143,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         raise RuntimeError("완성 영상에 오디오가 없습니다.")
     os.replace(folder / "output.pending.mp4", folder / "shorts.mp4")
     result = {"duration": actual, "width": 720, "height": 1280, "fps": 30, "speech_speed": speed,
-              "bytes": (folder / "shorts.mp4").stat().st_size, "captions": subtitles}
+              "bytes": (folder / "shorts.mp4").stat().st_size, "captions": subtitles,
+              "voice_pipeline": narration["voice_pipeline"], "caption_timing": narration["caption_timing"],
+              "scene_timing": narration["scenes"]}
     (folder / "render.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), "utf-8")
     return result

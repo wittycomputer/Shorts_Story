@@ -91,8 +91,9 @@ def factual_warnings(scenes: list[dict], original: str) -> list[str]:
 
 
 def speech_phrases(text: str, limit: int = 40) -> list[str]:
-    """Each phrase gets its own WAV so captions use measured audio boundaries."""
-    sentences = [s.strip() for s in re.split(r"(?<=[.!?。])\s*", text) if s.strip()]
+    """Short display captions only. Never use these chunks as TTS input."""
+    from korean_speech import speech_sentences
+    sentences = speech_sentences(text)
     phrases = []
     for sentence in sentences:
         words = sentence.split()
