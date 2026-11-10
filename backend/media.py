@@ -145,6 +145,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     result = {"duration": actual, "width": 720, "height": 1280, "fps": 30, "speech_speed": speed,
               "bytes": (folder / "shorts.mp4").stat().st_size, "captions": subtitles,
               "voice_pipeline": narration["voice_pipeline"], "caption_timing": narration["caption_timing"],
+              "voice": project.get("voice", "M1"),
               "scene_timing": narration["scenes"]}
     (folder / "render.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), "utf-8")
     return result

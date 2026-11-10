@@ -103,6 +103,7 @@ class ShortoryApi {
     required String source,
     required int target,
     required String style,
+    String voice = 'M1',
   }) async => Project.fromJson(
     await _request('POST', '/projects', {
       'title': title,
@@ -110,16 +111,21 @@ class ShortoryApi {
       'source': source,
       'target_seconds': target,
       'style': style,
+      'voice': voice,
     }),
   );
   Future<Project> action(String id, String action) async =>
       Project.fromJson(await _request('POST', '/projects/$id/$action'));
-  Future<Project> saveScenes(String id, List<Scene> scenes) async =>
-      Project.fromJson(
-        await _request('PUT', '/projects/$id/scenes', {
-          'scenes': scenes.map((s) => s.toJson()).toList(),
-        }),
-      );
+  Future<Project> saveScenes(
+    String id,
+    List<Scene> scenes, {
+    String? voice,
+  }) async => Project.fromJson(
+    await _request('PUT', '/projects/$id/scenes', {
+      'scenes': scenes.map((s) => s.toJson()).toList(),
+      if (voice != null) 'voice': voice,
+    }),
+  );
   String fileUrl(String id, String file) => '$baseUrl/files/$id/$file';
 
   Future<void> download(

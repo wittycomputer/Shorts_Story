@@ -6,7 +6,9 @@
 
 한국어 음성은 **완결된 문장 단위**로 생성합니다. 숫자·소수점·단위·일반 영문 약어는 낭독용 한글로 변환하고, 자막은 표시용 대사를 사용합니다. 자막 길이 때문에 음성을 잘라 합성하지 않으며 장면 전체의 음성을 하나의 트랙으로 연결합니다.
 
-새 숏츠를 만들 때도 공통 음성 생성 단계에서 단어 사이의 지나치게 긴 쉼과 늘어지는 첫 자음을 조절합니다. 음성 설정이 바뀌면 캐시를 다시 생성해 최신 처리를 적용합니다.
+음성 모델은 **Supertonic 3**이며 한국어(`ko`)를 명시해 한글을 직접 입력합니다. **새 숏츠 → 내레이션 목소리**에서 남성·여성을 선택하고, **이야기 편집실**에서도 바꿀 수 있습니다. 기존 영상은 목소리를 바꾼 뒤 다시 생성하면 반영됩니다. 선택값은 작업 기록에 저장하며 목소리·모델·설정이 바뀌면 음성 캐시를 다시 생성합니다.
+
+이전 MMS-TTS의 쉼 조절은 발음·억양 자체를 충분히 개선하지 못했습니다. 현재 공통 생성 경로는 모델을 교체했으며, 로마자 변환과 VITS 토큰 길이 보정은 사용하지 않습니다. 숫자 읽기와 완결 문장 합성, 연속 음성 트랙은 유지합니다. 이미 설치했다면 최신 소스를 받은 뒤 **`setup.bat`을 한 번 실행하고 서버를 다시 시작**해 새 모델과 의존성을 준비하세요.
 
 **다른 사람도 소스를 내려받아 자신의 Windows PC와 Firebase 프로젝트로 실행할 수 있습니다.** Flutter 앱은 화면·인증·영상 재생을 담당하고, PC의 Python 서버가 로컬 AI 추론과 영상 합성을 담당합니다. 각 사용자의 PC에서 서버를 켜야 하며, GitHub는 소스를 배포하는 역할입니다.
 
@@ -48,7 +50,7 @@ Flutter Android 앱
   └─ 해당 PC의 FastAPI 서버: Firebase ID 토큰으로 요청
        ├─ Qwen3-4B: 글 → 장면별 한국어 대본
        ├─ SDXL-Turbo: 장면 설명 → 이미지
-       ├─ MMS-TTS Korean: 대본 → 한국어 음성
+       ├─ Supertonic 3 (ko): 대본 → 선택한 남성·여성 한국어 음성
        └─ FFmpeg: 이미지 + 음성 + 자막 → 720×1280 MP4
 ```
 
@@ -56,10 +58,10 @@ Flutter Android 앱
 |---|---|
 | 대본 · `Qwen/Qwen3-4B` | NVIDIA GPU, 4bit NF4, 원문 근거 문단 검증 |
 | 이미지 · `stabilityai/sdxl-turbo` | FP16, GPU와 CPU offload, 512×512 생성 |
-| 음성 · `facebook/mms-tts-kor` | CPU VITS, uroman 전처리 |
+| 음성 · `supertone-oss-archive/supertonic-3` | CPU ONNX, 한국어 지정, 남성 M1·여성 F1 기본 음색 |
 | 영상 · FFmpeg | 확대·이동 효과, 흐린 배경, 한국어 자막, H.264/AAC |
 
-텍스트 → 이미지·음성 → 영상으로 여러 모달리티를 연계합니다. 모델은 동시에 GPU에 올리지 않습니다. `backend/models.lock.json`의 commit으로 다운로드하고 추론은 `local_files_only=True`로 수행합니다. 외부 AI 추론 API는 사용하지 않으며, Firebase 인증과 기록 동기화에는 인터넷이 필요합니다.
+텍스트 → 이미지·음성 → 영상으로 여러 모달리티를 연계합니다. 모델은 동시에 GPU에 올리지 않습니다. `backend/models.lock.json`의 commit으로 다운로드하고 추론은 로컬 캐시만 사용합니다. 음성 SDK의 자동 다운로드도 끕니다. 외부 AI 추론 API는 사용하지 않으며, Firebase 인증과 기록 동기화에는 인터넷이 필요합니다.
 
 Firestore에는 `users/{uid}`와 `users/{uid}/shorts/{projectId}` 경로로 제목, 원문, 출처, 대본, 길이와 생성 상태를 저장합니다. MP4·이미지·음성은 서버 PC의 `backend/data/{projectId}/`에 남습니다. 비밀번호는 Firebase Authentication에서 처리하며 PC 서버나 Firestore에 저장하지 않습니다. [인증과 접근 제한](docs/FIREBASE.md)
 
@@ -113,7 +115,8 @@ GPU 모델을 내려받지 않고 개발 의존성만 준비할 때는 `setup.ba
 
 - [Qwen3-4B 모델 카드](https://huggingface.co/Qwen/Qwen3-4B)
 - [SDXL-Turbo 모델 카드](https://huggingface.co/stabilityai/sdxl-turbo)
-- [MMS-TTS Korean 모델 카드](https://huggingface.co/facebook/mms-tts-kor)
+- [Supertonic 3 모델·OpenRAIL 라이선스](https://huggingface.co/supertone-oss-archive/supertonic-3)
+- [Supertonic SDK·MIT 라이선스](https://github.com/supertone-oss-archive/supertonic-py) — 공식 보관 저장소의 고정 버전을 사용합니다.
 - [Flutter 설치](https://docs.flutter.dev/install/quick)
 - [uv 설치](https://docs.astral.sh/uv/getting-started/installation/)
 - [Firebase Admin 설정](https://firebase.google.com/docs/admin/setup)

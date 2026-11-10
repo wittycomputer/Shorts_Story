@@ -143,7 +143,11 @@ class _ProjectScreenState extends State<ProjectScreen> {
   }
 
   Future<void> _save() async {
-    final updated = await widget.api.saveScenes(project.id, project.scenes);
+    final updated = await widget.api.saveScenes(
+      project.id,
+      project.scenes,
+      voice: project.voice,
+    );
     if (mounted) {
       setState(() {
         project = updated;
@@ -389,6 +393,21 @@ class _ProjectScreenState extends State<ProjectScreen> {
           ],
           if (project.isCompleted) _result(),
           if (!project.isBusy && project.scenes.isNotEmpty) ...[
+            const SectionTitle('내레이션 목소리'),
+            NarrationVoiceSelector(
+              selected: project.voice,
+              onChanged: working
+                  ? null
+                  : (voice) => setState(() {
+                      project.voice = voice;
+                      dirty = true;
+                    }),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '목소리를 바꾼 뒤 영상을 다시 생성하면 적용됩니다.',
+              style: TextStyle(color: muted, fontSize: 12),
+            ),
             SectionTitle(
               '장면별 대본',
               trailing: dirty
@@ -480,7 +499,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
   Widget _result() => Column(
     children: [
       if (dirty) ...[
-        const Notice('대본을 수정했습니다. 수정한 내용으로 영상을 다시 생성한 뒤 저장해 주세요.'),
+        const Notice('대본 또는 목소리를 변경했습니다. 영상을 다시 생성하면 반영됩니다.'),
         const SizedBox(height: 14),
       ],
       if (videoError != null) ...[

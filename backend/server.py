@@ -218,6 +218,7 @@ def health():
             "models": models, "ffmpeg": bool(shutil.which("ffmpeg")), "active_jobs": len(events),
             "privacy": "local-ai-firebase-records", "api_version": 2,
             "voice_pipeline": VOICE_PIPELINE_VERSION,
+            "voices": [{"id": "M1", "label": "남성"}, {"id": "F1", "label": "여성"}],
             "auth_required": True, "firebase": public_settings()}
 
 
@@ -256,7 +257,8 @@ def edit_scenes(project_id: str, body: EditScenes, uid: str = Depends(current_us
         if any(not set(s.source_ids).issubset(valid) for s in body.scenes):
             raise HTTPException(422, "원문 근거 문단이 올바르지 않습니다.")
         scenes = [s.model_dump() for s in body.scenes]
-        update(project_id, scenes=scenes, status="draft_ready", result=None, error=None,
+        update(project_id, scenes=scenes, voice=body.voice or project.get("voice", "M1"),
+               status="draft_ready", result=None, error=None,
                warnings=factual_warnings(scenes, project["text"]), message="수정한 대본을 저장했습니다.")
     return public(read(project_id))
 

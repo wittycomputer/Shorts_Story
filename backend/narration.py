@@ -11,7 +11,7 @@ import soundfile as sf
 from domain import allocate_timing, speech_phrases
 
 SENTENCE_PAUSE = 0.10
-VOICE_PIPELINE_VERSION = "ko-word-rhythm-v3"
+VOICE_PIPELINE_VERSION = "ko-supertonic3-v4"
 
 
 def clean_waveform(wave: np.ndarray, sample_rate: int) -> np.ndarray:

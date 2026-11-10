@@ -31,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final TextEditingController title, article, source, address;
   int tab = 0, target = 45;
   String style = 'explain';
+  String voice = 'M1';
   bool working = false, checking = false, listing = false;
   Map<String, dynamic>? health;
   String? connectionError, listError;
@@ -60,6 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
     address = TextEditingController(text: api.baseUrl);
     target = p.getInt(_draftKey('target')) ?? 45;
     style = p.getString(_draftKey('style')) ?? 'explain';
+    voice = p.getString(_draftKey('voice')) == 'F1' ? 'F1' : 'M1';
     for (final c in [title, article, source]) {
       c.addListener(_persist);
     }
@@ -105,6 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
     widget.prefs.setString(_draftKey('source'), source.text);
     widget.prefs.setInt(_draftKey('target'), target);
     widget.prefs.setString(_draftKey('style'), style);
+    widget.prefs.setString(_draftKey('voice'), voice);
   }
 
   Future<void> _check() async {
@@ -223,6 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
         source: source.text.trim(),
         target: target,
         style: style,
+        voice: voice,
       );
       if (mounted) await _open(p);
     } catch (e) {
@@ -488,6 +492,16 @@ class _HomeScreenState extends State<HomeScreen> {
           _persist();
         },
       ),
+      const SectionTitle('내레이션 목소리'),
+      NarrationVoiceSelector(
+        selected: voice,
+        onChanged: working
+            ? null
+            : (selected) {
+                setState(() => voice = selected);
+                _persist();
+              },
+      ),
       const SizedBox(height: 24),
       FilledButton.icon(
         onPressed: working ? null : _create,
@@ -731,7 +745,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Divider(height: 28),
             _modelRow('장면 이미지', 'SDXL-Turbo', 'image'),
             const Divider(height: 28),
-            _modelRow('한국어 음성', 'MMS-TTS Korean', 'tts'),
+            _modelRow('한국어 음성', 'Supertonic 3 · 한국어', 'tts'),
           ],
         ),
       ),

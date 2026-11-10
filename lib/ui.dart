@@ -6,6 +6,32 @@ const mint = Color(0xFF92E3C3);
 const muted = Color(0xFF667487);
 const canvasColor = Color(0xFFF5F7F8);
 
+class NarrationVoiceSelector extends StatelessWidget {
+  final String selected;
+  final ValueChanged<String>? onChanged;
+  const NarrationVoiceSelector({
+    super.key,
+    required this.selected,
+    this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) => SegmentedButton<String>(
+    segments: const [
+      ButtonSegment(value: 'M1', icon: Icon(Icons.male), label: Text('남성 음성')),
+      ButtonSegment(
+        value: 'F1',
+        icon: Icon(Icons.female),
+        label: Text('여성 음성'),
+      ),
+    ],
+    selected: {selected},
+    onSelectionChanged: onChanged == null
+        ? null
+        : (values) => onChanged!(values.first),
+  );
+}
+
 class Surface extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;

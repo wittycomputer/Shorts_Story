@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+import runtime_paths  # Configure the local cache before importing HF libraries.
 
 BASE = Path(__file__).resolve().parent
 ROOT = BASE.parent
@@ -45,9 +46,12 @@ def check_ffmpeg() -> str:
 
 def check_models() -> str:
     from huggingface_hub import snapshot_download
+    from download_models import MODELS
     lock = read_json(BASE / 'models.lock.json')
     for role in ('llm', 'image', 'tts'):
         entry = lock[role]
+        if entry['repo'] != MODELS[role][0]:
+            raise ValueError(f'{role} model has changed. Run setup.bat to download the current model.')
         location = Path(snapshot_download(entry['repo'], revision=entry['revision'], local_files_only=True))
         if role == 'image':
             required = ['model_index.json', 'scheduler/scheduler_config.json',
@@ -57,6 +61,11 @@ def check_models() -> str:
                         'text_encoder_2/config.json', 'text_encoder_2/model.fp16.safetensors',
                         'unet/config.json', 'unet/diffusion_pytorch_model.fp16.safetensors',
                         'vae/config.json', 'vae/diffusion_pytorch_model.fp16.safetensors']
+        elif role == 'tts':
+            required = ['onnx/tts.json', 'onnx/unicode_indexer.json',
+                        'onnx/duration_predictor.onnx', 'onnx/text_encoder.onnx',
+                        'onnx/vector_estimator.onnx', 'onnx/vocoder.onnx',
+                        'voice_styles/M1.json', 'voice_styles/F1.json']
         else:
             required = ['config.json', 'tokenizer_config.json']
             required += ['tokenizer.json', 'vocab.json', 'merges.txt'] if role == 'llm' else ['vocab.json']
@@ -67,7 +76,7 @@ def check_models() -> str:
                 required += ['model.safetensors']
         if any(not (location / name).is_file() for name in required):
             raise ValueError(f'{role} cache is incomplete. Run setup.bat again to resume downloads.')
-    return 'Qwen3-4B, SDXL-Turbo, MMS-TTS Korean (locked revisions, local cache)'
+    return 'Qwen3-4B, SDXL-Turbo, Supertonic 3 Korean (locked revisions, local cache)'
 
 
 def check_firebase() -> str:

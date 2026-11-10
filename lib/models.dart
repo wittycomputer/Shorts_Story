@@ -28,6 +28,7 @@ class Scene {
 }
 
 class Project {
+  String voice;
   final String id, title, text, source, status, message;
   final String? error;
   final String? ownerUid;
@@ -40,7 +41,8 @@ class Project {
   final DateTime created;
   final double updated;
   Project.fromJson(Map<String, dynamic> j)
-    : id = j['id'] as String,
+    : voice = j['voice'] == 'F1' ? 'F1' : 'M1',
+      id = j['id'] as String,
       title = j['title'] as String,
       text = j['text'] as String,
       source = j['source'] as String,

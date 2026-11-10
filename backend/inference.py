@@ -188,18 +188,17 @@ def generate_images(project: dict, folder: Path, progress, cancel: Event):
 
 def synthesize(project: dict, folder: Path, progress, cancel: Event) -> list[dict]:
     import soundfile as sf
-    import torch
-    from transformers import VitsModel, AutoTokenizer, set_seed
     from korean_speech import normalize_for_speech, speech_sentences
     from narration import clean_waveform, SENTENCE_PAUSE, VOICE_PIPELINE_VERSION
-    from speech_rhythm import install_rhythm_control, RHYTHM_PROFILE
+    from korean_voice import KoreanVoice, TTS_PROFILE
     checkpoint(cancel)
-    progress(37, "한국어 음성 모델을 불러오는 중")
+    progress(37, "새 한국어 음성 모델을 불러오는 중")
+    entry = json.loads((BASE / "models.lock.json").read_text("utf-8"))["tts"]
+    if entry["repo"] != "supertone-oss-archive/supertonic-3":
+        raise RuntimeError("한국어 음성 모델을 교체했습니다. PC에서 setup.bat을 실행해 새 모델을 준비해 주세요.")
     location = model_path("tts")
-    tokenizer = AutoTokenizer.from_pretrained(location, local_files_only=True)
-    model = VitsModel.from_pretrained(location, local_files_only=True).eval()
-    model.speaking_rate = RHYTHM_PROFILE['speaking_rate']
-    model.noise_scale_duration = RHYTHM_PROFILE['duration_noise']
+    voice = project.get("voice", "M1")
+    model = KoreanVoice(location, voice)
     records = []
     audio_dir = folder / "audio"
     audio_dir.mkdir(exist_ok=True)
@@ -214,22 +213,15 @@ def synthesize(project: dict, folder: Path, progress, cancel: Event) -> list[dic
                 filename = audio_dir / f'{scene["id"]:02d}_{phrase_index:02d}.wav'
                 spoken = normalize_for_speech(phrase)
                 settings = {"version": VOICE_PIPELINE_VERSION, "spoken": spoken,
-                            "model": json.loads((BASE / "models.lock.json").read_text("utf-8"))["tts"],
-                            "seed": 42, "sample_rate": model.config.sampling_rate,
-                            "rhythm": RHYTHM_PROFILE}
+                            "model": entry, "sample_rate": model.sample_rate,
+                            "profile": TTS_PROFILE, "voice": voice}
                 digest = hashlib.sha256(json.dumps(settings, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
                 signature = filename.with_suffix(".sha256")
                 if not (filename.exists() and signature.exists() and signature.read_text() == digest):
-                    inputs = tokenizer(spoken, return_tensors="pt")
-                    set_seed(42)
-                    rhythm_hook, _report = install_rhythm_control(model, tokenizer, inputs)
-                    try:
-                        with torch.inference_mode():
-                            output = model(**inputs).waveform[0].cpu().numpy()
-                    finally:
-                        rhythm_hook.remove()
-                    output = clean_waveform(output, model.config.sampling_rate)
-                    sf.write(filename, output, model.config.sampling_rate)
+                    output = model.generate(spoken)
+                    checkpoint(cancel)
+                    output = clean_waveform(output, model.sample_rate)
+                    sf.write(filename, output, model.sample_rate)
                     signature.write_text(digest)
                 duration = sf.info(filename).duration
                 scene_record["phrases"].append({"text": phrase, "spoken_text": spoken,
@@ -239,5 +231,5 @@ def synthesize(project: dict, folder: Path, progress, cancel: Event) -> list[dic
             records.append(scene_record)
         return records
     finally:
-        del model, tokenizer
+        del model
         release_memory()

@@ -8,7 +8,7 @@
     "revision": "71153311d3dbb46851df1931d3ca6e939de83304"
   },
   "tts": {
-    "repo": "facebook/mms-tts-kor",
-    "revision": "1b6491366d2ed6ea8e4e735607155d9f0110df29"
+    "repo": "supertone-oss-archive/supertonic-3",
+    "revision": "aafc6e32416a594460b32413efc49d7fe4ce6d46"
   }
 }

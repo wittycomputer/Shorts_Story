@@ -43,7 +43,9 @@ cd C:\src\shortory
 
 ZIP으로 받은 경우 `git clone`을 실행하지 않고 압축을 푼 프로젝트 폴더로 이동합니다. `pubspec.yaml`이 있는 위치에서 나머지 명령을 실행합니다.
 
-설치 도구는 현재 프로젝트 아래에 `backend/.venv/`를 만들고 Python 3.11, PyTorch 2.7.1 CUDA 12.8, `backend/requirements.lock.txt`의 고정 패키지를 설치합니다. `requirements.txt`는 주요 직접 의존성 목록입니다. Windows 클라우드 폴더의 hardlink 충돌을 피하도록 패키지는 복사 방식으로 설치합니다. GPU와 영상 도구를 확인한 뒤 Hugging Face의 Qwen3-4B, SDXL-Turbo, MMS-TTS Korean을 다운로드합니다. 모델은 `backend/models.lock.json`의 리비전으로 고정됩니다.
+설치 도구는 현재 프로젝트 아래에 `backend/.venv/`를 만들고 Python 3.11, PyTorch 2.7.1 CUDA 12.8, `backend/requirements.lock.txt`의 고정 패키지를 설치합니다. `requirements.txt`는 주요 직접 의존성 목록입니다. Windows 클라우드 폴더의 hardlink 충돌을 피하도록 패키지는 복사 방식으로 설치합니다. GPU와 영상 도구를 확인한 뒤 Hugging Face의 Qwen3-4B, SDXL-Turbo, Supertonic 3을 다운로드합니다. 모델은 `backend/models.lock.json`의 리비전으로 고정됩니다.
+
+이전 MMS-TTS 버전에서 업데이트했다면 최신 소스를 받은 뒤 `setup.bat`을 다시 실행합니다. 약 400MB의 새 음성 모델과 ONNX Runtime·Supertonic SDK를 준비한 뒤 서버를 종료하고 `start_server.bat`으로 다시 시작합니다. Android Studio에서도 앱을 다시 실행해 목소리 선택 화면을 적용합니다. 새 숏츠 작성 화면과 이야기 편집실에서 **남성 음성 / 여성 음성**을 선택할 수 있습니다. 기존 영상의 음성은 다시 생성해야 바뀝니다.
 
 다운로드 중단 시 같은 명령으로 다시 실행하면 캐시를 이용해 이어받습니다. 모델 접근 승인이 요구되면 해당 모델 카드의 조건을 확인하고 Hugging Face 계정에서 필요한 승인을 진행합니다. GitHub 소스 ZIP에는 가중치를 넣지 않습니다.
 

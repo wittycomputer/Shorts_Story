@@ -15,6 +15,7 @@ class CreateProject(BaseModel):
     source: str = Field(default="직접 작성한 글", max_length=300)
     target_seconds: Literal[30, 45, 60] = 45
     style: Literal["explain", "news"] = "explain"
+    voice: Literal["M1", "F1"] = "M1"
 
     @field_validator("text")
     @classmethod
@@ -42,6 +43,7 @@ class Scene(BaseModel):
 
 class EditScenes(BaseModel):
     scenes: list[Scene] = Field(min_length=2, max_length=8)
+    voice: Literal["M1", "F1"] | None = None
 
     @model_validator(mode="after")
     def unique_ids(self):
